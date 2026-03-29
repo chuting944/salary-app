@@ -36,25 +36,34 @@ jobs:
             autoconf \
             libtool \
             openjdk-17-jdk \
-            zip
+            zip \
+            wget \
+            unzip
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v2
-
-      - name: Download Android SDK components
+      - name: Download and setup Android SDK
         run: |
-          export ANDROID_HOME=$ANDROID_SDK_ROOT
+          mkdir -p android-sdk
+          cd android-sdk
+          
+          # Download command line tools
+          wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O cmdline-tools.zip
+          unzip -q cmdline-tools.zip
+          mkdir -p cmdline-tools/latest
+          mv cmdline-tools/* cmdline-tools/latest/ 2>/dev/null || true
+          rm cmdline-tools.zip
+          
+          export ANDROID_HOME=$PWD
           export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools
           
-          # Accept all licenses
-          yes | sdkmanager --licenses || true
+          # Accept licenses
+          yes | sdkmanager --licenses 2>/dev/null || true
           
           # Install required components
-          sdkmanager --install "platforms;android-27" "build-tools;34.0.0" "platform-tools" "ndk;25.2.5" || true
+          sdkmanager --install "platforms;android-27" "build-tools;34.0.0" "platform-tools" 2>&1 | tail -5
           
-          # Verify installation
-          ls -la $ANDROID_HOME/build-tools/
-          ls -la $ANDROID_HOME/platforms/
+          echo "ANDROID_HOME=$PWD" >> $GITHUB_ENV
+          echo "ANDROIDSDK=$PWD" >> $GITHUB_ENV
+          echo "ANDROID_NDK_HOME=$PWD/ndk/25.2.5" >> $GITHUB_ENV
 
       - name: Install Python dependencies
         run: |
@@ -62,29 +71,28 @@ jobs:
 
       - name: Build debug APK
         env:
-          ANDROID_HOME: ${{ env.ANDROID_SDK_ROOT }}
-          ANDROIDSDK: ${{ env.ANDROID_SDK_ROOT }}
-          ANDROIDNDK: ${{ env.ANDROID_SDK_ROOT }}/ndk/25.2.5
+          ANDROID_HOME: ${{ env.ANDROID_HOME }}
+          ANDROIDSDK: ${{ env.ANDROIDSDK }}
+          ANDROIDNDK: ${{ env.ANDROID_NDK_HOME }}
           ANDROIDAPI: 27
           ANDROIDMINAPI: 21
         run: |
-          export ANDROID_HOME=$ANDROID_SDK_ROOT
           export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools
           
-          buildozer android debug --verbose 2>&1 || true
+          buildozer android debug 2>&1 | tail -50
           
-          # Find APK files
+          echo "=== Finding APK files ==="
           find . -name "*.apk" -type f 2>/dev/null
-          find .buildozer -name "*.apk" -type f 2>/dev/null || true
+          find .buildozer -name "*.apk" -type f 2>/dev/null || echo "No APK found"
 
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:
           name: salary-app-apk
           path: |
-            **/*.apk
-            .buildozer/**/bin/*.apk
             .buildozer/**/dists/**/*.apk
+            .buildozer/**/bin/**/*.apk
+            **/salaryapp*.apk
           retention-days: 7
 
       - name: Upload build logs on failure
