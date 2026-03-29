@@ -40,10 +40,13 @@ jobs:
             wget \
             unzip
 
-      - name: Download and setup Android SDK
+      - name: Pre-setup Android SDK for Buildozer
         run: |
-          mkdir -p android-sdk
-          cd android-sdk
+          # Buildozer downloads SDK to ~/.buildozer/android/platform/android-sdk/
+          # We need to pre-install SDK tools there BEFORE buildozer runs
+          
+          mkdir -p ~/.buildozer/android/platform/android-sdk
+          cd ~/.buildozer/android/platform/android-sdk
           
           # Download command line tools
           wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O cmdline-tools.zip
@@ -52,18 +55,23 @@ jobs:
           mv cmdline-tools/* cmdline-tools/latest/ 2>/dev/null || true
           rm cmdline-tools.zip
           
+          export PATH=$PATH:$PWD/cmdline-tools/latest/bin
           export ANDROID_HOME=$PWD
-          export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools
+          export ANDROID_SDK_ROOT=$PWD
           
-          # Accept licenses
+          # Accept ALL licenses FIRST
           yes | sdkmanager --licenses 2>/dev/null || true
           
-          # Install required components
-          sdkmanager --install "platforms;android-27" "build-tools;34.0.0" "platform-tools" 2>&1 | tail -5
+          # Install required SDK components for API 27 (Android 8.1)
+          sdkmanager --install \
+            "platforms;android-27" \
+            "build-tools;34.0.0" \
+            "platform-tools" \
+            "ndk;25.2.5" 2>&1 | tail -10
           
-          echo "ANDROID_HOME=$PWD" >> $GITHUB_ENV
-          echo "ANDROIDSDK=$PWD" >> $GITHUB_ENV
-          echo "ANDROID_NDK_HOME=$PWD/ndk/25.2.5" >> $GITHUB_ENV
+          echo "=== SDK Installation Complete ==="
+          ls -la $ANDROID_HOME/platforms/ 2>/dev/null || echo "No platforms"
+          ls -la $ANDROID_HOME/build-tools/ 2>/dev/null || echo "No build-tools"
 
       - name: Install Python dependencies
         run: |
@@ -71,19 +79,23 @@ jobs:
 
       - name: Build debug APK
         env:
-          ANDROID_HOME: ${{ env.ANDROID_HOME }}
-          ANDROIDSDK: ${{ env.ANDROIDSDK }}
-          ANDROIDNDK: ${{ env.ANDROID_NDK_HOME }}
+          ANDROID_HOME: /home/runner/.buildozer/android/platform/android-sdk
+          ANDROIDSDK: /home/runner/.buildozer/android/platform/android-sdk
+          ANDROID_NDK_HOME: /home/runner/.buildozer/android/platform/android-sdk/ndk/25.2.5
           ANDROIDAPI: 27
           ANDROIDMINAPI: 21
         run: |
           export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools
           
-          buildozer android debug 2>&1 | tail -50
+          # Ensure licenses are accepted
+          yes | sdkmanager --licenses 2>/dev/null || true
+          
+          echo "=== Starting Buildozer Build ==="
+          buildozer android debug 2>&1
           
           echo "=== Finding APK files ==="
           find . -name "*.apk" -type f 2>/dev/null
-          find .buildozer -name "*.apk" -type f 2>/dev/null || echo "No APK found"
+          find ~/.buildozer -name "*.apk" -type f 2>/dev/null || echo "No APK found"
 
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
