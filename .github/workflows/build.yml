@@ -21,7 +21,22 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y python3-dev libncurses5 libncurses5-dev libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev libssl-dev libffi-dev libsqlite3-dev zlib1g-dev autoconf libtool adb
+          sudo apt-get install -y \
+            python3-dev \
+            libncurses6 \
+            libncurses-dev \
+            libsdl2-dev \
+            libsdl2-image-dev \
+            libsdl2-mixer-dev \
+            libsdl2-ttf-dev \
+            libssl-dev \
+            libffi-dev \
+            libsqlite3-dev \
+            zlib1g-dev \
+            autoconf \
+            libtool \
+            adb \
+            openjdk-17-jdk
 
       - name: Install Python dependencies
         run: |
@@ -39,12 +54,10 @@ jobs:
         env:
           ANDROID_HOME: ${{ env.ANDROID_HOME }}
           ANDROIDSDK: ${{ env.ANDROID_HOME }}
-          ANDROIDNDK: ${{ env.ANDROID_HOME }}/ndk/25.2.5
           ANDROIDAPI: 27
           ANDROIDMINAPI: 21
         run: |
           buildozer android debug --verbose 2>&1 || true
-          # Check for APK in common locations
           find . -name "*.apk" -type f 2>/dev/null
 
       - name: Upload debug APK
