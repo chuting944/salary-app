@@ -35,30 +35,47 @@ jobs:
             zlib1g-dev \
             autoconf \
             libtool \
-            adb \
-            openjdk-17-jdk
+            openjdk-17-jdk \
+            zip
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v2
+
+      - name: Download Android SDK components
+        run: |
+          export ANDROID_HOME=$ANDROID_SDK_ROOT
+          export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools
+          
+          # Accept all licenses
+          yes | sdkmanager --licenses || true
+          
+          # Install required components
+          sdkmanager --install "platforms;android-27" "build-tools;34.0.0" "platform-tools" "ndk;25.2.5" || true
+          
+          # Verify installation
+          ls -la $ANDROID_HOME/build-tools/
+          ls -la $ANDROID_HOME/platforms/
 
       - name: Install Python dependencies
         run: |
           pip install buildozer cython
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v2
-
-      - name: Accept Android licenses
-        run: |
-          yes | sdkmanager --licenses || true
-          sdkmanager "platforms;android-27" "build-tools;27.0.3" "platform-tools"
-
       - name: Build debug APK
         env:
-          ANDROID_HOME: ${{ env.ANDROID_HOME }}
-          ANDROIDSDK: ${{ env.ANDROID_HOME }}
+          ANDROID_HOME: ${{ env.ANDROID_SDK_ROOT }}
+          ANDROIDSDK: ${{ env.ANDROID_SDK_ROOT }}
+          ANDROIDNDK: ${{ env.ANDROID_SDK_ROOT }}/ndk/25.2.5
           ANDROIDAPI: 27
           ANDROIDMINAPI: 21
         run: |
+          export ANDROID_HOME=$ANDROID_SDK_ROOT
+          export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools
+          
           buildozer android debug --verbose 2>&1 || true
+          
+          # Find APK files
           find . -name "*.apk" -type f 2>/dev/null
+          find .buildozer -name "*.apk" -type f 2>/dev/null || true
 
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
@@ -66,7 +83,8 @@ jobs:
           name: salary-app-apk
           path: |
             **/*.apk
-            .buildozer/**/*.apk
+            .buildozer/**/bin/*.apk
+            .buildozer/**/dists/**/*.apk
           retention-days: 7
 
       - name: Upload build logs on failure
